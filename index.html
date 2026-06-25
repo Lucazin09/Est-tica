@@ -1267,6 +1267,100 @@
 </div>
 
 <script>
+const SUPABASE_PROJECT_ID = 'xbfpphyghvtaqwuhqwep';
+const SUPABASE_REST_URL = 'https://xbfpphyghvtaqwuhqwep.supabase.co/rest/v1';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhiZnBwaHlnaHZ0YXF3dWhxd2VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNjQ5MTYsImV4cCI6MjA5Nzc0MDkxNn0.iAV8-YxIDjsQg3Se9cQsjQCa76DSR0ZQ89rWl-26fv0';
+
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extra
+  };
+}
+
+async function supabaseGet(path) {
+  const res = await fetch(`${SUPABASE_REST_URL}/${path}`, {
+    headers: supabaseHeaders({ Accept: 'application/json' })
+  });
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+function setTextIfFound(selector, value) {
+  if (value == null) return;
+  const el = document.querySelector(selector);
+  if (el) el.textContent = value;
+}
+
+function applySitePayload(payload) {
+  if (!payload) return;
+  setTextIfFound('.brand-eyebrow', payload.brand_eyebrow);
+  setTextIfFound('.brand-name', payload.brand_name);
+  setTextIfFound('.brand-sub', payload.brand_subtitle);
+  setTextIfFound('.intro-strip p', payload.intro_text);
+
+  const heads = document.querySelectorAll('.section-head');
+  if (heads[0]) {
+    const h2 = heads[0].querySelector('h2');
+    const p = heads[0].querySelector('p');
+    if (h2 && payload.services_title != null) h2.textContent = payload.services_title;
+    if (p && payload.services_subtitle != null) p.textContent = payload.services_subtitle;
+  }
+  if (heads[1]) {
+    const h2 = heads[1].querySelector('h2');
+    const p = heads[1].querySelector('p');
+    if (h2 && payload.results_title != null) h2.textContent = payload.results_title;
+    if (p && payload.results_subtitle != null) p.textContent = payload.results_subtitle;
+  }
+
+  setTextIfFound('.wa-eyebrow', payload.whatsapp_eyebrow);
+  setTextIfFound('.wa-section h3', payload.whatsapp_title);
+  const waSub = document.querySelector('.wa-section > p:nth-of-type(2)');
+  if (waSub && payload.whatsapp_subtitle != null) waSub.textContent = payload.whatsapp_subtitle;
+  if (payload.whatsapp_number) {
+    const waInput = document.getElementById('waInput');
+    if (waInput) waInput.value = payload.whatsapp_number;
+    updateWA(payload.whatsapp_number);
+  }
+  setTextIfFound('footer p', payload.footer_text);
+
+  if (Array.isArray(payload.services) && payload.services.length) {
+    services = payload.services.map((s, index) => ({
+      id: s.legacyId || s.id || index + 1,
+      cat: s.cat || 'Servico',
+      name: s.name || 'Sem nome',
+      desc: s.desc || '',
+      price: s.price || 'Consulte',
+      dur: s.dur || '-',
+      img: s.img || ''
+    }));
+    render();
+  }
+
+  if (Array.isArray(payload.time_slots) && payload.time_slots.length) {
+    TIME_SLOTS = payload.time_slots.slice();
+  }
+
+  if (Array.isArray(payload.slides) && payload.slides.length) {
+    const track = document.getElementById('carTrack');
+    if (track) {
+      track.innerHTML = payload.slides
+        .map((slide) => `<div class="car-slide"><img src="${slide.src || slide}" alt="${slide.alt || 'Resultado'}"/></div>`)
+        .join('');
+    }
+  }
+}
+
+async function loadSiteFromSupabase() {
+  try {
+    const rows = await supabaseGet('site_payload?select=*&id=eq.main&limit=1');
+    applySitePayload(rows[0]);
+  } catch (err) {
+    console.warn('Nao foi possivel carregar dados do Supabase. Usando conteudo local.', err);
+  }
+}
+
 /* ───────────────────────────────────────
    STATE
 ─────────────────────────────────────── */
@@ -1389,19 +1483,17 @@ document.getElementById('overlay').addEventListener('click', function(e) {
 });
 
 /* ───────────────────────────────────────
-   INIT
-─────────────────────────────────────── */
-render();
-
-/* ───────────────────────────────────────
    CAROUSEL
 ─────────────────────────────────────── */
-(function() {
+function initCarousel() {
   let idx = 0;
-  const total = 6;
   const track = document.getElementById('carTrack');
   const dotsWrap = document.getElementById('carDots');
   const counter = document.getElementById('carCounter');
+  const total = track ? track.children.length : 0;
+  if (!track || !dotsWrap || !total) return;
+
+  dotsWrap.innerHTML = '';
 
   for (let i = 0; i < total; i++) {
     const d = document.createElement('div');
@@ -1428,7 +1520,7 @@ render();
   });
 
   setInterval(() => goTo(idx + 1), 5000);
-})();
+}
 
 
 /* ───────────────────────────────────────
@@ -1648,6 +1740,14 @@ function downloadBookingFile(){
 document.getElementById('bookOverlay').addEventListener('click', function(e){
   if(e.target === this) closeBooking();
 });
+
+async function initSite(){
+  await loadSiteFromSupabase();
+  render();
+  initCarousel();
+}
+
+initSite();
 
 </script>
 </body>
